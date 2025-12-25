@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # --- Service 1: MySQL Database ---
+  mysqldb:
+    image: mysql:8.0
+    container_name: mysqldb
+    restart: always
+    environment:
+      # Lấy password từ file .env cho bảo mật
+      MYSQL_ROOT_PASSWORD: ${DB_PASS}
+      MYSQL_DATABASE: ${DB_NAME}
+    volumes:
+      # Mount dữ liệu ra ngoài để không mất khi reset container
+      - ./mysql_data:/var/lib/mysql
+    networks:
+      - app-network
+
+  # --- Service 2: Redis (Cache) ---
+  redis:
+    image: redis:alpine
+    container_name: redis
+    restart: always
+    networks:
+      - app-network
+
+  # --- Service 3: Backend (NestJS) ---
+  backend:
+    # Thay huyhoang2609 bằng username docker hub của bạn
+    image: huyhoang2609/mini-e-backend:latest
+    container_name: backend
+    restart: always
+    # Đọc toàn bộ biến môi trường từ file .env
+    env_file:
+      - .env
+    # Ghi đè/Bổ sung biến môi trường đặc thù cho Docker
+    environment:
+      DB_HOST: mysqldb       # Tên service mysql ở trên
+      REDIS_HOST: redis      # Tên service redis ở trên
+      PORT: 3000
+    volumes:
+      # Mount thư mục uploads ra server để giữ ảnh khi deploy lại
+      - ./uploads:/app/uploads
+    depends_on:
+      - mysqldb
+      - redis
+    networks:
+      - app-network
+
+  # --- Service 4: Frontend (Nginx + React) ---
+  frontend:
+    image: huyhoang2609/mini-e-frontend:latest
+    container_name: frontend
+    restart: always
+    ports:
+      - "80:80" # Mở port 80 cho người dùng truy cập
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+# Khai báo mạng nội bộ
+networks:
+  app-network:
+    driver: bridge
