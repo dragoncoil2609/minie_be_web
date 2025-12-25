@@ -1,39 +1,40 @@
-# --- Giai đoạn 1: Build Source Code ---
-    FROM node:18-alpine AS builder
+# --- Stage 1: Build ---
+FROM node:18-alpine AS builder
 
-    WORKDIR /app
-    
-    # Copy file package để cài thư viện trước (Tối ưu cache layer)
-    COPY package*.json ./
-    # Dùng npm ci để cài chính xác phiên bản trong lock file
-    RUN npm ci
-    
-    # Copy toàn bộ code vào
-    COPY . .
-    
-    # Build NestJS (Output ra thư mục dist)
-    # LƯU Ý: Đảm bảo script "build" trong package.json đã bao gồm việc copy templates email
-    # Nếu chưa, bạn có thể thêm dòng: RUN npm run copy:templates (nếu có lệnh này)
-    RUN npm run build
-    
-    # --- Giai đoạn 2: Chạy ứng dụng (Production) ---
-    FROM node:18-alpine
-    
-    WORKDIR /app
-    
-    # Thiết lập biến môi trường mặc định
-    ENV NODE_ENV=production
-    
-    # Copy thư viện và code đã build từ giai đoạn 1
-    COPY --from=builder /app/node_modules ./node_modules
-    COPY --from=builder /app/dist ./dist
-    COPY --from=builder /app/package.json ./
-    
-    # Tạo thư mục uploads để tránh lỗi nếu chưa có volume mount
-    RUN mkdir -p uploads
-    
-    # Expose port 3000
-    EXPOSE 3000
-    
-    # Lệnh chạy server
-    CMD ["node", "dist/main.js"]
+WORKDIR /app
+
+# 1. Cài đặt dependencies
+COPY package*.json ./
+RUN npm ci
+
+# 2. Copy source code
+COPY . .
+
+# 3. Build code
+# Lệnh này sẽ chạy "nest build".
+# QUAN TRỌNG: Nếu lệnh "build" trong package.json chưa bao gồm copy email templates,
+# bạn hãy bỏ comment dòng dưới đây để chạy thêm lệnh copy:
+# RUN npm run copy:templates
+RUN npm run build
+
+# --- Stage 2: Production Run ---
+FROM node:18-alpine
+
+WORKDIR /app
+
+# 1. Set biến môi trường production
+ENV NODE_ENV=production
+
+# 2. Copy file build từ Stage 1
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+
+# 3. Tạo thư mục uploads (để tránh lỗi nếu chưa mount volume)
+RUN mkdir -p uploads
+
+# 4. Mở port (Document)
+EXPOSE 3000
+
+# 5. Chạy app
+CMD ["node", "dist/main.js"]
