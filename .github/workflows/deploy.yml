@@ -23,7 +23,7 @@ jobs:
           context: .
           push: true
           # Tên ảnh phải KHỚP với tên trong file docker-compose.yml trên server
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/mini-e-backend:latest
+          tags: huyhoang2609/mini-e-backend:latest
 
   deploy-to-ec2:
     needs: build-and-push # Chờ build xong mới deploy
