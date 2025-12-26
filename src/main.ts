@@ -3,11 +3,15 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiExceptionFilter } from './common/filters/http-exception.filter';
+import { json, urlencoded } from 'express';
 import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   // bỏ cors: true, tự cấu hình enableCors bên dưới
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
+
+  app.use(json({ limit: '50mb' }));
+  app.use(urlencoded({ extended: true, limit: '50mb' }));
 
   app.useGlobalFilters(new ApiExceptionFilter());
   app.setGlobalPrefix('api');
