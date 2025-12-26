@@ -5,6 +5,7 @@ import {
   NotFoundException,
   UnauthorizedException,
   InternalServerErrorException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
@@ -13,6 +14,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
 import { User, UserRole } from '../users/entities/user.entity';
+import { isFixedAdminEmail } from 'src/common/constants/fixed-admin';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RequestResetDto } from './dto/request-reset.dto';
@@ -251,6 +253,10 @@ export class AuthService {
       throw new BadRequestException('Phải nhập email hoặc số điện thoại');
     }
 
+    if (email && isFixedAdminEmail(email)) {
+      throw new ConflictException('Email đã tồn tại');
+    }
+
     if (dto.password !== dto.confirmPassword) {
       throw new BadRequestException('confirmPassword phải trùng với password');
     }
@@ -368,6 +374,9 @@ export class AuthService {
   // ========= Forgot Password (email) =========
   async requestPasswordReset(dto: RequestResetDto) {
     const email = dto.email.trim().toLowerCase();
+    if (isFixedAdminEmail(email)) {
+      throw new ForbiddenException('Không thể thay đổi tài khoản admin hệ thống');
+    }
     const user = await this.usersRepo.findOne({ where: { email } });
 
     if (!user) throw new NotFoundException('Email không tồn tại');
@@ -396,6 +405,9 @@ export class AuthService {
 
   async resetPassword(dto: ResetPasswordDto) {
     const email = dto.email.trim().toLowerCase();
+    if (isFixedAdminEmail(email)) {
+      throw new ForbiddenException('Không thể thay đổi tài khoản admin hệ thống');
+    }
     const user = await this.usersRepo
       .createQueryBuilder('u')
       .addSelect(['u.otp', 'u.passwordHash'])
@@ -432,6 +444,9 @@ export class AuthService {
     const raw = dto.email.trim();
     const byEmail = raw.includes('@');
     const value = byEmail ? raw.toLowerCase() : raw;
+    if (byEmail && isFixedAdminEmail(value)) {
+      throw new ForbiddenException('Không thể thay đổi tài khoản admin hệ thống');
+    }
 
     const qb = this.usersRepo.createQueryBuilder('u').withDeleted();
     if (byEmail) qb.where('u.email = :v', { v: value });
@@ -477,6 +492,9 @@ export class AuthService {
     const raw = dto.email.trim();
     const byEmail = raw.includes('@');
     const value = byEmail ? raw.toLowerCase() : raw;
+    if (byEmail && isFixedAdminEmail(value)) {
+      throw new ForbiddenException('Không thể thay đổi tài khoản admin hệ thống');
+    }
 
     const qb = this.usersRepo.createQueryBuilder('u').withDeleted();
     if (byEmail) qb.where('u.email = :v', { v: value });

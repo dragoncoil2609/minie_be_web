@@ -14,6 +14,7 @@ import { CreateShopDto } from './dto/create-shop.dto';
 import { UpdateShopDto } from './dto/update-shop.dto';
 import { QueryShopDto } from './dto/query-shop.dto';
 import { User, UserRole } from '../../modules/users/entities/user.entity';
+import { isFixedAdminEmail } from 'src/common/constants/fixed-admin';
 
 // ✅ thêm entities để join orders
 import { Order, OrderStatus, ShippingStatus } from '../../modules/orders/entities/order.entity';
@@ -226,6 +227,9 @@ export class ShopsService {
 
     const user = await this.usersRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('Không tìm thấy user.');
+    if (isFixedAdminEmail(user.email)) {
+      throw new ForbiddenException('Tài khoản admin hệ thống không thể đăng ký shop');
+    }
 
     const slug = await this.ensureUniqueSlug(dto.name);
 
@@ -453,7 +457,7 @@ export class ShopsService {
       await shopRepo.delete({ id: shop.id });
 
       const owner = await userRepo.findOne({ where: { id: shop.userId } });
-      if (owner && owner.role === UserRole.SELLER) {
+      if (owner && !isFixedAdminEmail(owner.email) && owner.role === UserRole.SELLER) {
         owner.role = UserRole.USER;
         await userRepo.save(owner);
         await userRepo.save(owner);

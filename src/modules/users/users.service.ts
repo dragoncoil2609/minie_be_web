@@ -4,6 +4,9 @@ import {
   ConflictException,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
+  Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
@@ -14,13 +17,24 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUserDto } from './dto/query-user.dto';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import {
+  FIXED_ADMIN_EMAIL,
+  FIXED_ADMIN_NAME,
+  FIXED_ADMIN_PASSWORD,
+  isFixedAdminEmail,
+} from 'src/common/constants/fixed-admin';
 
 @Injectable()
-export class UsersService {
+export class UsersService implements OnModuleInit {
+  private readonly logger = new Logger(UsersService.name);
   constructor(
     @InjectRepository(User) private readonly repo: Repository<User>,
     private readonly config: ConfigService,
   ) {}
+
+  async onModuleInit() {
+    await this.ensureFixedAdmin();
+  }
 
   private isUniqueViolation(e: any) {
     return (
@@ -33,6 +47,64 @@ export class UsersService {
   private normalizeEmail(email?: string) {
     const v = (email ?? '').trim();
     return v ? v.toLowerCase() : undefined;
+  }
+
+  private async hashPassword(raw: string) {
+    const rounds = Number(this.config.get('BCRYPT_SALT_ROUNDS') ?? 12);
+    const pepper = this.config.get<string>('BCRYPT_PEPPER');
+    const toHash = pepper ? raw + pepper : raw;
+    return bcrypt.hash(toHash, rounds);
+  }
+
+  private async ensureFixedAdmin() {
+    const email = FIXED_ADMIN_EMAIL;
+    const passwordHash = await this.hashPassword(FIXED_ADMIN_PASSWORD);
+
+    const existed = await this.repo.findOne({
+      where: { email },
+      withDeleted: true,
+    });
+
+    if (!existed) {
+      const entity = this.repo.create({
+        name: FIXED_ADMIN_NAME,
+        email,
+        passwordHash,
+        role: UserRole.ADMIN,
+        isVerified: true,
+        otp: null as any,
+        timeOtp: null as any,
+        phone: null as any,
+        avatarUrl: null as any,
+        birthday: null as any,
+        gender: null as any,
+      } as DeepPartial<User>);
+
+      await this.repo.save(entity);
+      this.logger.log(`Seeded fixed admin: ${email}`);
+      return;
+    }
+
+    if (existed.deletedAt) {
+      await this.repo.restore(existed.id);
+    }
+
+    await this.repo.update(
+      { id: existed.id },
+      {
+        name: FIXED_ADMIN_NAME,
+        email,
+        passwordHash,
+        role: UserRole.ADMIN,
+        isVerified: true,
+        otp: null as any,
+        timeOtp: null as any,
+        phone: null as any,
+        avatarUrl: null as any,
+        birthday: null as any,
+        gender: null as any,
+      } as any,
+    );
   }
 
   // VN normalize giống phần auth
@@ -53,6 +125,10 @@ export class UsersService {
   async create(dto: CreateUserDto): Promise<User> {
     const email = this.normalizeEmail(dto.email);
     const phone = this.normalizePhone(dto.phone);
+
+    if (email && isFixedAdminEmail(email)) {
+      throw new ConflictException('Email đã tồn tại');
+    }
 
     // Nếu DTO của bạn bắt buộc email thì đoạn này không cần,
     // nhưng để đồng bộ hệ thống (email/phone có thể thiếu) thì giữ lại:
@@ -79,11 +155,7 @@ export class UsersService {
         throw new ConflictException('Số điện thoại đã tồn tại');
     }
 
-    // hash password
-    const rounds = Number(this.config.get('BCRYPT_SALT_ROUNDS') ?? 12);
-    const pepper = this.config.get<string>('BCRYPT_PEPPER');
-    const toHash = pepper ? dto.password + pepper : dto.password;
-    const passwordHash = await bcrypt.hash(toHash, rounds);
+    const passwordHash = await this.hashPassword(dto.password);
 
     // ✅ Quan trọng: DeepPartial<User> để TS không match nhầm overload array
     const data: DeepPartial<User> = {
@@ -165,6 +237,10 @@ export class UsersService {
   async update(id: number, dto: UpdateUserDto): Promise<User> {
     const user = await this.findById(id); // nếu đã xoá mềm sẽ ném NotFound
 
+    if (isFixedAdminEmail(user.email)) {
+      throw new ForbiddenException('Không thể chỉnh sửa tài khoản admin hệ thống');
+    }
+
     if ((dto as any).email !== undefined) {
       const e = this.normalizeEmail(String((dto as any).email));
       (dto as any).email = e; // có thể undefined => set về NULL? (ở đây giữ undefined để không đổi)
@@ -176,10 +252,7 @@ export class UsersService {
     }
 
     if (dto.password) {
-      const rounds = Number(this.config.get('BCRYPT_SALT_ROUNDS') ?? 12);
-      const pepper = this.config.get<string>('BCRYPT_PEPPER');
-      const toHash = pepper ? dto.password + pepper : dto.password;
-      (user as any).passwordHash = await bcrypt.hash(toHash, rounds);
+      (user as any).passwordHash = await this.hashPassword(dto.password);
       delete (dto as any).password;
     }
 
@@ -204,6 +277,10 @@ export class UsersService {
     const existed = await this.repo.findOne({ where: { id }, withDeleted: true });
     if (!existed) throw new NotFoundException('User không tồn tại');
 
+    if (isFixedAdminEmail(existed.email)) {
+      throw new ForbiddenException('Không thể xoá tài khoản admin hệ thống');
+    }
+
     // Nếu đã xoá mềm trước đó → coi như “không tồn tại”
     if (existed.deletedAt) throw new NotFoundException('User không tồn tại');
 
@@ -215,6 +292,9 @@ export class UsersService {
   async restore(id: number): Promise<void> {
     const existed = await this.repo.findOne({ where: { id }, withDeleted: true });
     if (!existed) throw new NotFoundException('User không tồn tại');
+    if (isFixedAdminEmail(existed.email)) {
+      throw new ForbiddenException('Không thể thay đổi tài khoản admin hệ thống');
+    }
     if (!existed.deletedAt) return; // idempotent
 
     const res = await this.repo.restore(id);
@@ -222,6 +302,10 @@ export class UsersService {
   }
 
   async hardDelete(id: number): Promise<void> {
+    const existed = await this.repo.findOne({ where: { id }, withDeleted: true });
+    if (existed && isFixedAdminEmail(existed.email)) {
+      throw new ForbiddenException('Không thể xoá tài khoản admin hệ thống');
+    }
     const res = await this.repo.delete(id);
     if (!res.affected) throw new NotFoundException('User không tồn tại');
   }
@@ -271,7 +355,10 @@ export class UsersService {
       .createQueryBuilder()
       .delete()
       .from(User)
-      .where('deletedAt IS NOT NULL AND deletedAt < :cutoff', { cutoff })
+      .where('deletedAt IS NOT NULL AND deletedAt < :cutoff AND (email IS NULL OR email <> :adminEmail)', {
+        cutoff,
+        adminEmail: FIXED_ADMIN_EMAIL,
+      })
       .execute();
   }
 }
