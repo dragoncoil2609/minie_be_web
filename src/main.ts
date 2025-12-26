@@ -44,6 +44,8 @@ async function bootstrap() {
     'http://localhost:3000',   // FE/BE cùng cổng hoặc FE dev
     'http://192.168.1.199',    // FE qua Nginx (80)
     'http://192.168.1.199:80',
+    'http://54.66.11.139:80',
+    'http://54.66.11.139',
     ...extraFromEnv,
   ]);
 
