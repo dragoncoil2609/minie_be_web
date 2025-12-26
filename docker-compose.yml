@@ -37,7 +37,7 @@ services:
     environment:
       DB_HOST: mysqldb       # Tên service mysql ở trên
       REDIS_HOST: redis      # Tên service redis ở trên
-      PORT:
+    ports:
       - "3000:3000"
     volumes:
       # Mount thư mục uploads ra server để giữ ảnh khi deploy lại
