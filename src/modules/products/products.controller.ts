@@ -36,6 +36,8 @@ import { AccessTokenGuard } from '../../common/guards/access-token.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../../modules/users/entities/user.entity';
 import { UpdateProductDto } from './dto/search-product.dto';
+import { Roles } from 'src/common/decorators/roles.decorator';
+import { AppRole } from 'src/common/constants/roles';
 
 // ==== cấu hình upload nhiều ảnh (vẫn lưu vào uploads/products) ====
 const uploadOptions: MulterOptions = {
@@ -87,6 +89,7 @@ export class ProductsController {
     return { success: true, data };
   }
 
+  @Roles(AppRole.ADMIN, AppRole.SELLER)
   @Post()
   @UseInterceptors(FilesInterceptor('images', 10, uploadOptions))
   async create(
@@ -121,7 +124,7 @@ export class ProductsController {
 
     return { success: true, data: product };
   }
-
+  @Roles(AppRole.ADMIN, AppRole.SELLER)
   @Patch(':id')
   async updateProduct(
     @Param('id', ParseIntPipe) id: number,
@@ -132,7 +135,7 @@ export class ProductsController {
     const data = await this.productsService.updateProduct(id, userId, role, dto);
     return { success: true, data };
   }
-
+  @Roles(AppRole.ADMIN, AppRole.SELLER)
   @Delete(':id')
   async removeProduct(
     @Param('id') id: string,
@@ -143,6 +146,7 @@ export class ProductsController {
     return { res };
   }
 
+  @Roles(AppRole.ADMIN, AppRole.SELLER)
   @Post(':id/variants/generate')
   async generateVariants(
     @Param('id') id: string,
@@ -154,6 +158,7 @@ export class ProductsController {
     return { success: true, data };
   }
 
+
   @Get(':id/variants')
   async listVariants(
     @Param('id') id: string,
@@ -164,6 +169,7 @@ export class ProductsController {
     return { success: true, data };
   }
 
+  @Roles(AppRole.ADMIN, AppRole.SELLER)
   @Patch(':productId/variants/:variantId')
   async updateVariant(
     @Param('productId') productId: string,

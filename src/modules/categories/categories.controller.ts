@@ -6,6 +6,8 @@ import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { SearchCategoriesDto } from './dto/search-categories.dto';
+import { AppRole } from 'src/common/constants/roles';
+import { Roles } from 'src/common/decorators/roles.decorator';
 
 @Controller('categories')
 export class CategoriesController {
@@ -34,6 +36,7 @@ export class CategoriesController {
   }
 
   // ===== admin =====
+  @Roles(AppRole.ADMIN)
   @Post()
   async create(
     @CurrentUser('role') role: UserRole,
@@ -42,7 +45,7 @@ export class CategoriesController {
     const data = await this.categoriesService.create(role, dto);
     return { success: true, data };
   }
-
+  @Roles(AppRole.ADMIN)
   @Patch(':id')
   async update(
     @CurrentUser('role') role: UserRole,
@@ -52,7 +55,7 @@ export class CategoriesController {
     const data = await this.categoriesService.update(role, id, dto);
     return { success: true, data };
   }
-
+  @Roles(AppRole.ADMIN)
   @Delete(':id')
   async remove(
     @CurrentUser('role') role: UserRole,
